@@ -1,18 +1,18 @@
-# CockroachDB Multi-Region
+# Distributed SQL Multi-Region
 
-**Distributed SQL database with native multi-region support**
+**Globally distributed databases with multi-region replication**
 
-> **Managed**: CockroachDB Cloud → **Self-hosted**: CockroachDB OSS (same features, for learning)
+> **Managed**: AWS Aurora Global → **Self-hosted**: TiDB (for learning, MySQL compatible)
 
 ---
 
 ## Overview
 
-CockroachDB is a distributed SQL database that provides native multi-region capabilities. Unlike traditional databases that require external replication tools, CockroachDB handles cross-region data distribution using SQL statements.
+Distributed SQL databases provide ACID transactions across multiple regions with automatic failover and data locality.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                     CockroachDB Cluster                         │
+│                   Distributed SQL Cluster                       │
 │                                                                 │
 │   ┌───────────┐      ┌───────────┐      ┌───────────┐          │
 │   │  Region 1 │◄────►│  Region 2 │◄────►│  Region 3 │          │
@@ -20,257 +20,234 @@ CockroachDB is a distributed SQL database that provides native multi-region capa
 │   └───────────┘      └───────────┘      └───────────┘          │
 │         │                  │                  │                 │
 │         └──────────────────┴──────────────────┘                 │
-│                    Raft Consensus                               │
+│                    Replication                                  │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Key Benefit**: Multi-region is configured via SQL, not infrastructure.
+---
+
+## Options Comparison
+
+| Solution | Managed | Self-hosted | Compatibility | Protocol |
+|----------|---------|-------------|---------------|----------|
+| Aurora Global | AWS | ✗ | MySQL/PostgreSQL | Proprietary |
+| TiDB | TiDB Cloud | TiDB OSS | MySQL | Raft |
+| CockroachDB | Cockroach Cloud | CockroachDB OSS | PostgreSQL | Raft |
+| YugabyteDB | Yugabyte Cloud | YugabyteDB OSS | PostgreSQL | Raft |
+| Cloud Spanner | GCP | ✗ | PostgreSQL-like | TrueTime |
 
 ---
 
-## Core Concepts
+## AWS Aurora Global Database
 
-### Cluster Region
-Geographic region specified at node startup:
-```bash
-cockroach start --locality=region=us-east-1,zone=us-east-1a
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Aurora Global Database                       │
+│                                                                 │
+│   ┌─────────────────┐              ┌─────────────────┐          │
+│   │  Primary Region │   async      │ Secondary Region│          │
+│   │   (us-east-1)   │ ──────────►  │   (eu-west-1)   │          │
+│   │                 │  <1s lag     │                 │          │
+│   │  ┌───────────┐  │              │  ┌───────────┐  │          │
+│   │  │  Writer   │  │              │  │  Reader   │  │          │
+│   │  │ Instance  │  │              │  │ Instances │  │          │
+│   │  └───────────┘  │              │  └───────────┘  │          │
+│   │  ┌───────────┐  │              │  ┌───────────┐  │          │
+│   │  │  Reader   │  │              │  │  Storage  │  │          │
+│   │  │ Instances │  │              │  │  (copy)   │  │          │
+│   │  └───────────┘  │              │  └───────────┘  │          │
+│   └─────────────────┘              └─────────────────┘          │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Database Region
-Regions where a database operates:
-```sql
-ALTER DATABASE mydb PRIMARY REGION "us-east-1";
-ALTER DATABASE mydb ADD REGION "us-west-2";
-ALTER DATABASE mydb ADD REGION "eu-west-1";
+### Key Features
+- **Replication lag**: <1 second typical
+- **Failover**: Promote secondary to primary (~1 minute)
+- **Read scaling**: Read from any region
+- **Write**: Single primary region only
+
+### Failover
 ```
+Normal:
+  Primary (us-east-1) ──async──► Secondary (eu-west-1)
+        ▲
+     Writes
 
-### Survival Goals
-How many failures the database can survive:
-
-| Goal | Requirement | Survives |
-|------|-------------|----------|
-| `ZONE` (default) | 3+ zones in 1 region | Single zone failure |
-| `REGION` | 3+ regions | Entire region failure |
-
-```sql
--- Survive zone failure (default)
-ALTER DATABASE mydb SURVIVE ZONE FAILURE;
-
--- Survive region failure
-ALTER DATABASE mydb SURVIVE REGION FAILURE;
+Failover:
+  1. Detect primary failure
+  2. Promote secondary to primary (~1 min)
+  3. Update application endpoints
 ```
 
 ---
 
-## Table Locality Patterns
+## TiDB (Self-hosted for Learning)
 
-### 1. REGIONAL BY TABLE (Default)
+### Why TiDB?
+- MySQL compatible (familiar syntax)
+- Horizontal scaling
+- Strong consistency (Raft)
+- Open source, active community
 
-All data optimized for one region. Best for region-specific data.
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        TiDB Cluster                             │
+│                                                                 │
+│   ┌─────────┐  ┌─────────┐  ┌─────────┐                        │
+│   │  TiDB   │  │  TiDB   │  │  TiDB   │   SQL Layer            │
+│   │ Server  │  │ Server  │  │ Server  │   (stateless)          │
+│   └────┬────┘  └────┬────┘  └────┬────┘                        │
+│        │            │            │                              │
+│        └────────────┼────────────┘                              │
+│                     │                                           │
+│   ┌─────────────────▼─────────────────┐                        │
+│   │              PD Cluster           │   Placement Driver     │
+│   │   (scheduling, timestamp oracle)  │   (metadata)           │
+│   └─────────────────┬─────────────────┘                        │
+│                     │                                           │
+│   ┌─────────┬───────┼───────┬─────────┐                        │
+│   │         │       │       │         │                        │
+│   ▼         ▼       ▼       ▼         ▼                        │
+│ ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐  ┌─────┐  Storage Layer    │
+│ │TiKV │  │TiKV │  │TiKV │  │TiKV │  │TiKV │  (Raft groups)    │
+│ └─────┘  └─────┘  └─────┘  └─────┘  └─────┘                    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Multi-Region Setup
+
+```
+┌───────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│     Region 1      │     │     Region 2      │     │     Region 3      │
+│    (us-east-1)    │     │    (us-west-2)    │     │    (eu-west-1)    │
+│                   │     │                   │     │                   │
+│  TiDB + TiKV + PD │◄───►│  TiDB + TiKV + PD │◄───►│  TiDB + TiKV + PD │
+│                   │     │                   │     │                   │
+└───────────────────┘     └───────────────────┘     └───────────────────┘
+                              Raft Replication
+```
+
+### Placement Rules (Data Locality)
 
 ```sql
--- Table optimized for us-east-1
-ALTER TABLE users SET LOCALITY REGIONAL BY TABLE IN "us-east-1";
+-- Place data for EU users in EU region
+CREATE PLACEMENT POLICY eu_policy
+  PRIMARY_REGION="eu-west-1"
+  REGIONS="eu-west-1,us-east-1,us-west-2";
+
+-- Apply to table
+ALTER TABLE eu_users PLACEMENT POLICY eu_policy;
 ```
 
-```
-us-east-1          us-west-2          eu-west-1
-┌─────────┐        ┌─────────┐        ┌─────────┐
-│ ★ Data  │◄──────►│ Replica │◄──────►│ Replica │
-│ (Lease) │        │         │        │         │
-└─────────┘        └─────────┘        └─────────┘
-     │
-Fast reads/writes
-```
-
-**Use when**: Data belongs to a specific region (e.g., EU customers in EU region)
-
-### 2. REGIONAL BY ROW
-
-Different rows optimized for different regions. CockroachDB adds a hidden `crdb_region` column.
-
-```sql
-ALTER TABLE orders SET LOCALITY REGIONAL BY ROW;
-
--- Insert automatically uses node's region, or specify:
-INSERT INTO orders (id, customer, crdb_region)
-VALUES (1, 'Alice', 'us-east-1');
-```
-
-```
-us-east-1          us-west-2          eu-west-1
-┌─────────┐        ┌─────────┐        ┌─────────┐
-│ Row 1 ★ │        │ Row 2 ★ │        │ Row 3 ★ │
-│ Row 4   │        │ Row 5   │        │ Row 6   │
-└─────────┘        └─────────┘        └─────────┘
-```
-
-**Use when**: Data access patterns vary by row (e.g., user data accessed from user's region)
-
-### 3. GLOBAL
-
-Optimized for low-latency reads from any region. Writes are slower.
-
-```sql
-ALTER TABLE config SET LOCALITY GLOBAL;
-```
-
-```
-us-east-1          us-west-2          eu-west-1
-┌─────────┐        ┌─────────┐        ┌─────────┐
-│ ★ Full  │        │ ★ Full  │        │ ★ Full  │
-│  Copy   │        │  Copy   │        │  Copy   │
-└─────────┘        └─────────┘        └─────────┘
-     │                  │                  │
-     └──── Fast reads from anywhere ──────┘
-```
-
-**Use when**: Reference data, config, read-heavy lookup tables
-
----
-
-## Locality Comparison
-
-| Locality | Read Latency | Write Latency | Use Case |
-|----------|--------------|---------------|----------|
-| REGIONAL BY TABLE | Low (in region) | Low (in region) | Region-specific data |
-| REGIONAL BY ROW | Low (from row's region) | Low (to row's region) | Per-user/per-tenant data |
-| GLOBAL | Low (everywhere) | High (consensus needed) | Reference data, configs |
-
----
-
-## Survival Goals Deep Dive
-
-### ZONE Survival (Default)
-
-```
-Region: us-east-1
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│ Zone A  │  │ Zone B  │  │ Zone C  │
-│  Node1  │  │  Node2  │  │  Node3  │
-│ Replica │  │ Replica │  │ Replica │
-└─────────┘  └─────────┘  └─────────┘
-      ▲
-  Zone A fails?
-  Still operational!
-```
-
-- 3 replicas across zones
-- Survives 1 zone failure
-- Lower latency (all in same region)
-
-### REGION Survival
-
-```
-┌─────────┐      ┌─────────┐      ┌─────────┐
-│us-east-1│      │us-west-2│      │eu-west-1│
-│ 2 nodes │      │ 2 nodes │      │ 1 node  │
-│2 replica│      │2 replica│      │1 replica│
-└─────────┘      └─────────┘      └─────────┘
-      ▲
-  Region fails?
-  Still operational!
-```
-
-- 5 replicas (2 in primary, rest distributed)
-- Survives entire region failure
-- Requires 3+ regions
-- Higher write latency (cross-region consensus)
-
----
-
-## Setup Example
-
-### 1. Start Nodes with Locality
+### Quick Start (Docker)
 
 ```bash
-# Region 1
-cockroach start --locality=region=us-east-1,zone=us-east-1a ...
-cockroach start --locality=region=us-east-1,zone=us-east-1b ...
+# Start TiDB cluster locally
+curl --proto '=https' --tlsv1.2 -sSf https://tiup-mirrors.pingcap.com/install.sh | sh
+tiup playground --tag multi-region \
+  --pd 3 \
+  --tikv 3 \
+  --tidb 2
 
-# Region 2
-cockroach start --locality=region=us-west-2,zone=us-west-2a ...
-cockroach start --locality=region=us-west-2,zone=us-west-2b ...
-
-# Region 3
-cockroach start --locality=region=eu-west-1,zone=eu-west-1a ...
-```
-
-### 2. Configure Database
-
-```sql
--- Create multi-region database
-CREATE DATABASE myapp PRIMARY REGION "us-east-1";
-ALTER DATABASE myapp ADD REGION "us-west-2";
-ALTER DATABASE myapp ADD REGION "eu-west-1";
-
--- Enable region survival
-ALTER DATABASE myapp SURVIVE REGION FAILURE;
-```
-
-### 3. Configure Tables
-
-```sql
--- User data: regional by row (users access from their region)
-CREATE TABLE users (
-    id UUID PRIMARY KEY,
-    email STRING,
-    region crdb_internal_region
-) LOCALITY REGIONAL BY ROW;
-
--- Config: global (read from anywhere)
-CREATE TABLE config (
-    key STRING PRIMARY KEY,
-    value STRING
-) LOCALITY GLOBAL;
-
--- Orders: regional by row (accessed from customer's region)
-CREATE TABLE orders (
-    id UUID PRIMARY KEY,
-    user_id UUID REFERENCES users(id),
-    total DECIMAL
-) LOCALITY REGIONAL BY ROW;
+# Connect with MySQL client
+mysql -h 127.0.0.1 -P 4000 -u root
 ```
 
 ---
 
-## Trade-offs
+## Multi-Region Patterns
 
-| Aspect | Single Region | Multi-Region |
-|--------|---------------|--------------|
-| Latency | Low | Higher (cross-region) |
-| Availability | Zone survival | Region survival |
-| Complexity | Simple | More planning needed |
-| Cost | Lower | Higher (network, nodes) |
+### Pattern 1: Single Writer, Multi-Reader
+
+```
+         Writes
+            │
+            ▼
+┌─────────────────┐              ┌─────────────────┐
+│  Primary Region │   async      │ Secondary Region│
+│     (Writer)    │ ──────────►  │    (Reader)     │
+└─────────────────┘              └─────────────────┘
+                                        │
+                                        ▼
+                                    Local Reads
+```
+
+- **Aurora Global**: Native support
+- **TiDB**: Use follower-read or placement rules
+- **Trade-off**: Simple, but writes have single point
+
+### Pattern 2: Multi-Writer (Active-Active)
+
+```
+┌─────────────────┐              ┌─────────────────┐
+│    Region 1     │◄────────────►│    Region 2     │
+│  (Read/Write)   │    sync      │  (Read/Write)   │
+└─────────────────┘              └─────────────────┘
+```
+
+- **TiDB/CockroachDB**: Supported with Raft
+- **Aurora**: Not supported (single writer)
+- **Trade-off**: Higher latency for consistency
+
+### Pattern 3: Geo-Partitioned
+
+```
+EU Users ──► EU Region (EU data lives here)
+US Users ──► US Region (US data lives here)
+Asia Users ──► Asia Region (Asia data lives here)
+```
+
+- Data stays in user's region
+- Low latency for local operations
+- Compliance friendly (data residency)
+
+---
+
+## Comparison: Aurora vs TiDB
+
+| Aspect | Aurora Global | TiDB |
+|--------|---------------|------|
+| Managed | Yes (AWS) | Self-hosted or TiDB Cloud |
+| Multi-writer | No | Yes |
+| Replication | Async (<1s) | Sync (Raft) |
+| Consistency | Eventual (cross-region) | Strong |
+| Failover | ~1 minute | Automatic (Raft) |
+| Compatibility | MySQL/PostgreSQL | MySQL |
+| Vendor lock-in | AWS | None |
 
 ---
 
 ## Best Practices
 
-1. **Start with locality planning**
-   - Which data needs to be where?
-   - What are the access patterns?
+1. **Choose based on write pattern**
+   - Single writer → Aurora Global (simpler)
+   - Multi-writer → TiDB/CockroachDB
 
-2. **Use REGIONAL BY ROW for user data**
-   - Data follows user location
-   - Low latency for user operations
+2. **Plan data locality**
+   - Keep data close to users
+   - Use placement policies
 
-3. **Use GLOBAL sparingly**
-   - Only for read-heavy reference data
-   - Writes are expensive
+3. **Understand consistency trade-offs**
+   - Sync replication = higher latency
+   - Async replication = possible data loss
 
-4. **Plan for 3+ regions for REGION survival**
-   - Can't survive region failure with only 2 regions
+4. **Test failover**
+   - Automate failover procedures
+   - Measure RTO/RPO
 
-5. **Monitor cross-region latency**
-   - Use CockroachDB console
-   - Track p99 latencies
+5. **Monitor replication lag**
+   - Alert on high lag
+   - Track cross-region latency
 
 ---
 
 ## References
 
-- [Multi-Region Capabilities Overview](https://www.cockroachlabs.com/docs/stable/multiregion-overview)
-- [Choosing a Multi-Region Configuration](https://www.cockroachlabs.com/docs/stable/choosing-a-multi-region-configuration.html)
-- [Multi-Region Topology Patterns](https://www.cockroachlabs.com/blog/multi-region-topology-patterns/)
-- [Survive Region Outages](https://www.cockroachlabs.com/blog/under-the-hood-multi-region/)
+- [Aurora Global Database](https://docs.aws.amazon.com/AmazonRDS/latest/AuroraUserGuide/aurora-global-database.html)
+- [TiDB Multi-Region](https://docs.pingcap.com/tidb/stable/multi-data-centers-in-one-city-deployment)
+- [TiDB Placement Rules](https://docs.pingcap.com/tidb/stable/placement-rules-in-sql)
+- [CockroachDB Multi-Region](https://www.cockroachlabs.com/docs/stable/multiregion-overview)
