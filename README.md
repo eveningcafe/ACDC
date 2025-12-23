@@ -151,8 +151,8 @@ DC1 [Master] <===async===> DC2 [Master]
 
 ```
 ┌────────────────────────────────────────────────────────────────────────────┐
-│                              REGION (us-east-1)                             │
-│                                                                             │
+│                              REGION (us-east-1)                            │
+│                                                                            │
 │   ┌─────────────────────────┐         ┌─────────────────────────┐          │
 │   │    AZ (us-east-1a)      │         │    AZ (us-east-1b)      │          │
 │   │                         │         │                         │          │
@@ -241,7 +241,10 @@ Last Backup ──────────────────────�
 ### Other Key Concepts
 
 - **Rack Awareness**: Spread replicas across failure domains
-- **Async vs Sync Replication**: Trade-off between latency and durability
+- **Anti-Affinity**: Don't place replicas on same node/rack/zone (avoid single point of failure)
+- **Quorum**: Majority of nodes must agree (e.g., 3 nodes → need 2 to agree)
+- **Split-Brain**: Two partitions think they're the leader → data inconsistency
+- **Fencing**: Prevent split-brain by killing/isolating old leader
 
 ---
 

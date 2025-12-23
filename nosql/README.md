@@ -27,7 +27,6 @@ NoSQL databases with native multi-region support for high availability and low l
 | Database | Multi-DC Free? | Managed | Self-hosted |
 |----------|----------------|---------|-------------|
 | **Cassandra** | Yes (core feature) | DataStax Astra | Apache Cassandra |
-| **DynamoDB** | Yes | AWS DynamoDB | ✗ |
 | **ScyllaDB** | Yes | ScyllaDB Cloud | ScyllaDB OSS |
 | **CouchDB** | Yes | Cloudant | Apache CouchDB |
 | Elasticsearch | No (X-Pack paid) | Elastic Cloud | Limited |
