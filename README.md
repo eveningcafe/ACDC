@@ -139,7 +139,7 @@ DC1 [Master] <===async===> DC2 [Master]
 | [Distributed SQL](./distributed-sql/) | CockroachDB Cloud | CockroachDB OSS | Docs |
 | [Object Storage](./object-storage/) | AWS S3 | MinIO | Docs |
 | [DNS](./dns/) | Route 53 | PowerDNS | Docs |
-| [Service Mesh](./service-mesh/) | HCP Consul | Consul OSS | Docs |
+| [Service Discovery](./service-discovery/) | HCP Consul | Consul OSS | Docs |
 | [API Gateway](./api-gateway/) | AWS API Gateway | Kong | Docs |
 
 ---

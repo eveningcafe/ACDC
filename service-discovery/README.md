@@ -1,6 +1,6 @@
-# Consul Multi-Datacenter
+# Service Discovery Multi-Datacenter
 
-**Service mesh, service discovery, and configuration across datacenters**
+**Service discovery, health checking, and KV store across datacenters**
 
 > **Managed**: HCP Consul → **Self-hosted**: Consul OSS (for learning, WAN federation is free)
 
