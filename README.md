@@ -144,6 +144,40 @@ DC1 [Master] <===async===> DC2 [Master]
 
 ## Common Patterns
 
+### Infrastructure Terminology
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              REGION (us-east-1)                             │
+│                                                                             │
+│   ┌─────────────────────────┐         ┌─────────────────────────┐          │
+│   │    AZ (us-east-1a)      │         │    AZ (us-east-1b)      │          │
+│   │                         │         │                         │          │
+│   │  ┌───────────────────┐  │         │  ┌───────────────────┐  │          │
+│   │  │   DATACENTER      │  │         │  │   DATACENTER      │  │          │
+│   │  │                   │  │         │  │                   │  │          │
+│   │  │  ┌─────┐ ┌─────┐  │  │         │  │  ┌─────┐ ┌─────┐  │  │          │
+│   │  │  │RACK1│ │RACK2│  │  │         │  │  │RACK1│ │RACK2│  │  │          │
+│   │  │  └─────┘ └─────┘  │  │         │  │  └─────┘ └─────┘  │  │          │
+│   │  └───────────────────┘  │         │  └───────────────────┘  │          │
+│   └─────────────────────────┘         └─────────────────────────┘          │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+| Term | Scope | Failure Domain | Latency | Example |
+|------|-------|----------------|---------|---------|
+| **Rack** | Physical server cabinet | Power, ToR switch | <0.5ms | Single cabinet with 20-40 servers |
+| **Datacenter (DC)** | Building/facility | Power grid, cooling, network | <1ms | A building with multiple racks |
+| **Availability Zone (AZ)** | Isolated infrastructure | Independent power, network, cooling | 1-2ms | AWS us-east-1a, us-east-1b |
+| **Region** | Geographic area | Natural disasters, large-scale outages | 50-150ms | AWS us-east-1 (N. Virginia), eu-west-1 (Ireland) |
+
+**Key Points**:
+- **Rack** → Spread replicas to survive single rack failure (switch, power)
+- **AZ** → Spread across AZs to survive datacenter failure (cloud best practice)
+- **Region** → Spread across regions to survive regional disasters (highest availability, highest complexity)
+
+> In cloud environments, AZ ≈ Datacenter. On-premise, you define your own failure domains.
+
 ### Deployment Strategies
 
 | Pattern | Description | RPO | RTO |
