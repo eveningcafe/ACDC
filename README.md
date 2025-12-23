@@ -133,13 +133,13 @@ DC1 [Master] <===async===> DC2 [Master]
 
 ## Technologies
 
-| Technology | Description | Status |
-|------------|-------------|--------|
-| [Kafka](./kafka/) | Message streaming with MirrorMaker 2, Strimzi operator | Active |
-| [CockroachDB](./cockroachdb/) | Distributed SQL with native multi-region | Docs |
-| [MinIO](./minio/) | S3-compatible object storage, active-active replication | Docs |
-| [DNS](./dns/) | Route 53, global load balancing, failover | Docs |
-| [Consul](./consul/) | Service mesh, service discovery, WAN federation | Docs |
+| Category | Managed | Self-hosted | Status |
+|----------|---------|-------------|--------|
+| [Kafka](./kafka/) | Confluent | Strimzi | Active |
+| [Distributed SQL](./distributed-sql/) | CockroachDB Cloud | CockroachDB OSS | Docs |
+| [Object Storage](./object-storage/) | AWS S3 | MinIO | Docs |
+| [DNS](./dns/) | Route 53 | PowerDNS | Docs |
+| [Service Mesh](./service-mesh/) | HCP Consul | Consul OSS | Docs |
 
 ---
 
