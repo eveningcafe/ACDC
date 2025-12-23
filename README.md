@@ -176,7 +176,9 @@ DC1 [Master] <===async===> DC2 [Master]
 - **AZ** → Spread across AZs to survive datacenter failure (cloud best practice)
 - **Region** → Spread across regions to survive regional disasters (highest availability, highest complexity)
 
-> In cloud environments, AZ ≈ Datacenter. On-premise, you define your own failure domains.
+> **Cloud vs On-premise**:
+> - AWS/GCP/Azure: One AZ can contain **multiple datacenters** (different buildings/floors) connected by low-latency links, but they're treated as a single failure domain from user's perspective
+> - On-premise: You define your own failure domains based on your infrastructure
 
 ### Deployment Strategies
 

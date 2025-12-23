@@ -4,6 +4,9 @@
 # IDE
 .idea/
 
+# Claude context
+.claude-context
+
 # Kubernetes config files with credentials
 config
 
