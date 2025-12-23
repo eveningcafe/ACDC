@@ -1,0 +1,18 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: dc2-logstash-config-env
+data:
+  BOOTSTRAP_SERVERS: >-
+    cluster-dc2-kafka-bootstrap:9092
+#    cluster-dc2-kafka-bootstrap:9092,cluster-dc2-kafka-bootstrap:9093,cluster-dc2-kafka-bootstrap:9094
+  ES_HOST: 'http://elasticsearch-client.logging:9200'
+  TOPIC: active-passive
+  GROUP: dc2-logstash
+  INDEX_PREFIX: active-passive-dc2
+  LS_JAVA_OPTS: '-Xms1g -Xmx1g'
+  USER_ES: elastic
+  PASSWORD_ES: <YOUR_ELASTICSEARCH_PASSWORD>
+  THREADS: '4'
+  KEYSTORE_PASS: <YOUR_KEYSTORE_PASSWORD>
+  TRUSTSTORE_PASS: <YOUR_TRUSTSTORE_PASSWORD>

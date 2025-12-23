@@ -1,0 +1,108 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dc2-aggr-logstash
+  labels:
+    app: logstash
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+  template:
+    metadata:
+      name: logstash
+      labels:
+        app: logstash
+    spec:
+      containers:
+        - name: logstash
+          image: 'logstash:7.16.3'
+          command:
+            - logstash
+          ports:
+            - name: logstash
+              containerPort: 9600
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: active-active-dc2-logstash-aggr-config-env
+          resources:
+            limits:
+              cpu: '0'
+              memory: '0'
+            requests:
+              cpu: '0'
+              memory: '0'
+          volumeMounts:
+            - name: logstash-loghub
+              mountPath: /usr/share/logstash/config/conf.d/logtash.conf
+              subPath: logtash.conf
+            - name: logstash-yml
+              mountPath: /usr/share/logstash/config/logstash.yml
+              subPath: logstash.yml
+#            - name: vng-trust
+#              mountPath: /usr/share/logstash/kafkacert/vng.trust
+#              subPath: vng.trust
+#            - name: user-key
+#              mountPath: /usr/share/logstash/kafkacert/user.key
+#              subPath: user.key
+            - name: logstash-jvm
+              mountPath: /usr/share/logstash/config/jvm.options
+              subPath: jvm.options
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          imagePullPolicy: IfNotPresent
+      volumes:
+        - name: logstash-loghub
+          configMap:
+            name: logstash-loghub
+            items:
+              - key: logtash.conf
+                path: logtash.conf
+            defaultMode: 420
+        - name: logstash-yml
+          configMap:
+            name: logstash-yml
+            items:
+              - key: logstash.yml
+                path: logstash.yml
+            defaultMode: 420
+        - name: logstash-jvm
+          configMap:
+            name: logstash-jvm
+            items:
+              - key: jvm.options
+                path: jvm.options
+            defaultMode: 420
+#        - name: vng-trust
+#          secret:
+#            secretName: vng-trust
+#            defaultMode: 420
+#        - name: user-key
+#          secret:
+#            secretName: user-key-2jwvomglwxs0fs2uj6ox-loghub
+#            defaultMode: 420
+      restartPolicy: Always
+      terminationGracePeriodSeconds: 30
+      dnsPolicy: ClusterFirst
+#      nodeSelector:
+#        logservice: 'true'
+      securityContext: {}
+#      imagePullSecrets:
+#        - name: prod
+      schedulerName: default-scheduler
+      tolerations:
+        - key: logservice
+          operator: Equal
+          value: 'true'
+          effect: NoSchedule
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 25%
+      maxSurge: 25%
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+
+

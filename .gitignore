@@ -1,0 +1,11 @@
+# Secrets folder
+.secret/
+
+# IDE
+.idea/
+
+# Kubernetes config files with credentials
+config
+
+# Generated password files
+**/gen_pass_result.txt

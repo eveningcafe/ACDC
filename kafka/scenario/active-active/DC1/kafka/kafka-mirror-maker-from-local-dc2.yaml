@@ -1,0 +1,47 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaMirrorMaker2
+metadata:
+  name: mirror-maker-from-local-dc2
+spec:
+  version: 3.4.0
+  replicas: 1
+  connectCluster: "cluster-aggr-dc1" # Must be the target custer
+  clusters:
+  - alias: "cluster-local-dc2" # Source cluster
+    bootstrapServers: cluster-local-dc2-kafka-bootstrap:9093
+    tls:
+      trustedCertificates:
+        - secretName: cluster-local-dc2-cluster-ca-cert
+          certificate: ca.crt
+  - alias: "cluster-aggr-dc1" # Target cluster
+    bootstrapServers: cluster-aggr-dc1-kafka-bootstrap:9093
+    tls:
+      trustedCertificates:
+        - secretName: cluster-aggr-dc1-cluster-ca-cert
+          certificate: ca.crt
+    config:
+      # -1 means it will use the default replication factor configured in the broker
+      config.storage.replication.factor: -1
+      offset.storage.replication.factor: -1
+      status.storage.replication.factor: -1
+  mirrors:
+  - sourceCluster: "cluster-local-dc2"
+    targetCluster: "cluster-aggr-dc1"
+    sourceConnector:
+      tasksMax: 1
+      config:
+        replication.factor: 1
+        offset-syncs.topic.replication.factor: 1
+        sync.topic.acls.enabled: "true"
+    checkpointConnector:
+      tasksMax: 1
+      config:
+        checkpoints.topic.replication.factor: 1
+    topicsPattern: ".*"
+    groupsPattern: ".*"
+  metricsConfig:
+    type: jmxPrometheusExporter
+    valueFrom:
+      configMapKeyRef:
+        name: mirror-maker-2-metrics
+        key: metrics-config.yml

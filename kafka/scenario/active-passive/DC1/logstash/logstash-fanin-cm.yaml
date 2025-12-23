@@ -1,0 +1,32 @@
+# step 1 : sync group in topic mm2-offset-syncs.cluster-dc1.internal	to __consumer_offsets on passive cluster. check tool https://github.com/aws-samples/mirrormaker2-msk-migration/tree/master/MM2GroupOffsetSync/src/main/java/com/amazonaws/kafka
+# step 2: deploy logstash fan-in to get data on passive cluster to target.
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: logstash-fan-in
+data:
+  logtash.conf: |-
+    input {
+      kafka {
+        codec => json
+        bootstrap_servers=>"${BOOTSTRAP_SERVERS_PASSIVE}"
+        topics_pattern => ".*${TOPIC}.*"
+        decorate_events => "true"
+        auto_offset_reset => "beginning"
+        group_id => "${GROUP}"
+        consumer_threads => "${THREADS}"
+        client_id => "${HOSTNAME}"
+        metadata_max_age_ms => 20000
+      }
+    }    
+    output {
+      elasticsearch {
+        codec => json
+        hosts => ["${ES_HOST}"]
+        http_compression => true
+        index => "${INDEX_PREFIX}_%{+YYYY.MM.dd}"
+        user => "${USER_ES}"
+        password => "${PASSWORD_ES}"
+      }
+    }

@@ -1,0 +1,49 @@
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: active-active
+  labels:
+    strimzi.io/cluster: cluster-local-dc1
+spec:
+  partitions: 3
+  replicas: 3
+
+#---
+#apiVersion: kafka.strimzi.io/v1beta2
+#kind: KafkaUser
+#metadata:
+#  name: my-user
+#  labels:
+#    strimzi.io/cluster: cluster-dc1
+#spec:
+#  authentication:
+#    type: tls
+#  authorization:
+#    type: simple
+#    acls:
+#      # Example consumer Acls for topic my-topic using consumer group my-group
+#      - resource:
+#          type: topic
+#          name: static-website-dc1
+#          patternType: literal
+#        operations:
+#          - Describe
+#          - Read
+#        host: "*"
+#      - resource:
+#          type: group
+#          name: my-group
+#          patternType: literal
+#        operations:
+#          - Read
+#        host: "*"
+#      # Example Producer Acls for topic my-topic
+#      - resource:
+#          type: topic
+#          name: static-website-dc1
+#          patternType: literal
+#        operations:
+#          - Create
+#          - Describe
+#          - Write
+#        host: "*"

@@ -1,0 +1,18 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: active-active-dc1-logstash-aggr-config-env
+data:
+  BOOTSTRAP_SERVERS: >-
+    cluster-aggr-dc1-kafka-bootstrap:9092
+#    cluster-dc1-kafka-bootstrap:9092,cluster-dc1-kafka-bootstrap:9093,cluster-dc1-kafka-bootstrap:9094
+  ES_HOST: 'http://elasticsearch-client.logging:9200'
+  TOPIC: active-active
+  GROUP: cluster-local-dc2
+  INDEX_PREFIX: active-active-dc1
+  LS_JAVA_OPTS: '-Xms1g -Xmx1g'
+  USER_ES: elastic
+  PASSWORD_ES: <YOUR_ELASTICSEARCH_PASSWORD>
+  THREADS: '4'
+  KEYSTORE_PASS: <YOUR_KEYSTORE_PASSWORD>
+  TRUSTSTORE_PASS: <YOUR_TRUSTSTORE_PASSWORD>
