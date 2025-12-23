@@ -2,6 +2,8 @@
 
 **Global traffic management, failover, and load balancing**
 
+> **Managed**: AWS Route 53 → **Self-hosted**: PowerDNS (for learning)
+
 ---
 
 ## Overview

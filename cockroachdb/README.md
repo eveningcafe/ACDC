@@ -2,6 +2,8 @@
 
 **Distributed SQL database with native multi-region support**
 
+> **Managed**: CockroachDB Cloud → **Self-hosted**: CockroachDB OSS (same features, for learning)
+
 ---
 
 ## Overview

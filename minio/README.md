@@ -2,6 +2,8 @@
 
 **S3-compatible object storage with active-active replication**
 
+> **Managed**: AWS S3 → **Self-hosted**: MinIO (for learning, open-source)
+
 ---
 
 ## Overview

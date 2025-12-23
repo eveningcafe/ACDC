@@ -2,6 +2,8 @@
 
 **Stretch Cluster, Active/Passive, and Active/Active patterns with Strimzi**
 
+> **Managed**: Confluent Cloud → **Self-hosted**: Apache Kafka + Strimzi (for learning)
+
 ---
 
 ## Quick Navigation

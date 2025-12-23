@@ -2,6 +2,8 @@
 
 **Service mesh, service discovery, and configuration across datacenters**
 
+> **Managed**: HCP Consul → **Self-hosted**: Consul OSS (for learning, WAN federation is free)
+
 ---
 
 ## Overview
