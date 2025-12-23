@@ -136,9 +136,10 @@ DC1 [Master] <===async===> DC2 [Master]
 | Technology | Description | Status |
 |------------|-------------|--------|
 | [Kafka](./kafka/) | Message streaming with MirrorMaker 2, Strimzi operator | Active |
-| [CockroachDB](./cockroachdb/) | Distributed SQL database | Planned |
-| [MinIO](./minio/) | S3-compatible object storage | Planned |
-| [DNS](./dns/) | Global load balancing, failover | Planned |
+| [CockroachDB](./cockroachdb/) | Distributed SQL with native multi-region | Docs |
+| [MinIO](./minio/) | S3-compatible object storage, active-active replication | Docs |
+| [DNS](./dns/) | Route 53, global load balancing, failover | Docs |
+| [Consul](./consul/) | Service mesh, service discovery, WAN federation | Docs |
 
 ---
 
