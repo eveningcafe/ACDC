@@ -2,7 +2,7 @@
 
 **Traffic routing, rate limiting, and API management across datacenters**
 
-> **Managed**: AWS API Gateway → **Self-hosted**: Kong (for learning, open-source)
+> **Managed**: Cloudflare (global edge native) → **Self-hosted**: Kong (for learning, open-source)
 
 ---
 
@@ -11,14 +11,14 @@
 API Gateway is the entry point for all client requests. In multi-region setups, it handles routing, failover, and load balancing across datacenters.
 
 ```
-Clients
+Clients (worldwide)
    │
    ▼
 ┌─────────────────────────────────────────┐
-│         API Gateway (Kong / AWS)        │
+│      Global API Gateway (Edge)          │
 │   - Rate limiting                       │
 │   - Authentication                      │
-│   - Routing                             │
+│   - Geo-routing                         │
 └─────────────────────────────────────────┘
    │                    │
    ▼                    ▼
@@ -27,6 +27,20 @@ Clients
 │ Services│        │ Services│
 └─────────┘        └─────────┘
 ```
+
+---
+
+## Multi-Region Support Comparison
+
+| Solution | Multi-Region Native? | Type |
+|----------|---------------------|------|
+| **Cloudflare** | Yes (300+ edge locations) | Managed |
+| **Kong (Konnect)** | Yes | Managed |
+| AWS API Gateway | No (regional service) | Managed |
+| **Kong OSS** | Manual setup | Self-hosted |
+| **Traefik** | Manual setup | Self-hosted |
+
+> **Note**: AWS API Gateway is **regional only**. For multi-region, you need Route 53 + multiple regional deployments.
 
 ---
 
