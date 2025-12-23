@@ -137,6 +137,7 @@ DC1 [Master] <===async===> DC2 [Master]
 |----------|---------|-------------|--------|
 | [Kafka](./kafka/) | Confluent | Strimzi | Active |
 | [Distributed SQL](./distributed-sql/) | Aurora Global | TiDB | Docs |
+| [NoSQL](./nosql/) | DynamoDB Global | Cassandra | Docs |
 | [Object Storage](./object-storage/) | AWS S3 | MinIO | Docs |
 | [DNS](./dns/) | Route 53 | PowerDNS | Docs |
 | [Service Discovery](./service-discovery/) | HCP Consul | Consul OSS | Docs |
