@@ -126,8 +126,8 @@ DC1 [Master] <===async===> DC2 [Master]
 3. Commit   →  All nodes (or abort)
 ```
 - **Pros**: Complete distributed consensus, no data loss, full transaction support
-- **Cons**: Heavyweight, synchronous, high latency, complex to understand
-- **Examples**: etcd, ZooKeeper, CockroachDB
+- **Cons**: Heavyweight, synchronous, high latency, complex to understand - PhD level algorithm
+- **Examples**: etcd, ZooKeeper, Consul
 
 ---
 
@@ -142,6 +142,8 @@ DC1 [Master] <===async===> DC2 [Master]
 | [DNS](./dns/) | Route 53 | PowerDNS | Docs |
 | [Service Discovery](./service-discovery/) | HCP Consul | Consul OSS | Docs |
 | [API Gateway](./api-gateway/) | Cloudflare | Kong | Docs |
+
+> **Out of scope**: Kubernetes multi-cluster (GKE Fleet, Karmada, etc.) - it's a meta-topic that combines all above. Learn components first.
 
 ---
 
