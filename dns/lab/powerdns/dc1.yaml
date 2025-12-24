@@ -1,0 +1,195 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dns-dc1
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: powerdns-config
+  namespace: dns-dc1
+data:
+  pdns.conf: |
+    setuid=pdns
+    setgid=pdns
+    local-address=0.0.0.0
+    local-port=5300
+    launch=lmdb
+    lmdb-filename=/var/lib/powerdns/pdns.lmdb
+    lmdb-shards=2
+    lmdb-sync-mode=nosync
+    api=yes
+    api-key=changeme
+    webserver=yes
+    webserver-address=0.0.0.0
+    webserver-port=8081
+    webserver-allow-from=0.0.0.0/0
+    loglevel=4
+    log-dns-queries=yes
+
+  recursor.conf: |
+    local-address=0.0.0.0
+    local-port=5301
+    allow-from=0.0.0.0/0
+    forward-zones=example.com=127.0.0.1:5300,lab.local=127.0.0.1:5300
+    api-key=changeme
+    webserver=yes
+    webserver-address=0.0.0.0
+    webserver-port=8082
+    webserver-allow-from=0.0.0.0/0
+    loglevel=4
+    dnssec=off
+
+  dnsdist.conf: |
+    setLocal("0.0.0.0:53")
+    newServer({address="127.0.0.1:5300", name="auth", pool="auth"})
+    newServer({address="127.0.0.1:5301", name="recursor", pool="recursor"})
+    setACL({"0.0.0.0/0", "::/0"})
+    addAction({"example.com.", "lab.local."}, PoolAction("auth"))
+    addAction(AllRule(), PoolAction("recursor"))
+    webserver("0.0.0.0:8083")
+    setWebserverConfig({password="changeme", apiKey="changeme", acl="0.0.0.0/0"})
+
+  lightning-stream.yaml: |
+    instance: dc1
+    lmdbs:
+      pdns:
+        path: /var/lib/powerdns/pdns.lmdb
+        schema_tracks_changes: true
+    storage:
+      type: s3
+      options:
+        bucket: lightning-stream
+        endpoint: http://127.0.0.1:9000
+        region: us-east-1
+        force_path_style: true
+    sync:
+      snapshot_interval: 10s
+      poll_interval: 5s
+    http:
+      listen: 0.0.0.0:8084
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: minio-credentials
+  namespace: dns-dc1
+type: Opaque
+stringData:
+  root-user: minioadmin
+  root-password: minioadmin123
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: powerdns-data
+  namespace: dns-dc1
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: powerdns
+  namespace: dns-dc1
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: powerdns
+  template:
+    metadata:
+      labels:
+        app: powerdns
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      containers:
+        - name: dnsdist
+          image: powerdns/dnsdist-19:latest
+          ports:
+            - containerPort: 53
+              hostPort: 5353
+              protocol: UDP
+            - containerPort: 53
+              hostPort: 5353
+              protocol: TCP
+            - containerPort: 8083
+              hostPort: 8083
+          volumeMounts:
+            - name: config
+              mountPath: /etc/dnsdist/dnsdist.conf
+              subPath: dnsdist.conf
+          securityContext:
+            capabilities:
+              add: [NET_BIND_SERVICE]
+
+        - name: powerdns-auth
+          image: powerdns/pdns-auth-49:latest
+          ports:
+            - containerPort: 5300
+              hostPort: 5300
+              protocol: UDP
+            - containerPort: 5300
+              hostPort: 5300
+              protocol: TCP
+            - containerPort: 8081
+              hostPort: 8081
+          volumeMounts:
+            - name: config
+              mountPath: /etc/powerdns/pdns.conf
+              subPath: pdns.conf
+            - name: lmdb-data
+              mountPath: /var/lib/powerdns
+
+        - name: powerdns-recursor
+          image: powerdns/pdns-recursor-51:latest
+          ports:
+            - containerPort: 5301
+              hostPort: 5301
+              protocol: UDP
+            - containerPort: 5301
+              hostPort: 5301
+              protocol: TCP
+            - containerPort: 8082
+              hostPort: 8082
+          volumeMounts:
+            - name: config
+              mountPath: /etc/powerdns/recursor.conf
+              subPath: recursor.conf
+
+        - name: lightning-stream
+          image: powerdns/lightningstream:latest
+          args: [sync, --config, /etc/lightningstream/config.yaml]
+          ports:
+            - containerPort: 8084
+              hostPort: 8084
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-user
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: minio-credentials
+                  key: root-password
+          volumeMounts:
+            - name: config
+              mountPath: /etc/lightningstream/config.yaml
+              subPath: lightning-stream.yaml
+            - name: lmdb-data
+              mountPath: /var/lib/powerdns
+
+      volumes:
+        - name: config
+          configMap:
+            name: powerdns-config
+        - name: lmdb-data
+          persistentVolumeClaim:
+            claimName: powerdns-data
