@@ -4,6 +4,10 @@
 
 > **Managed**: AWS Route 53 → **Self-hosted**: PowerDNS (for learning)
 
+## Lab
+
+**[→ Hands-on Lab: PowerDNS Multi-DC ](./lab/)**
+
 ---
 
 ## Overview
@@ -15,7 +19,7 @@ User Request
      │
      ▼
 ┌─────────────────────────────────────────┐
-│           DNS (Route 53 / etc)          │
+│           DNS (Route 53 / PowerDNS)     │
 │   Which DC should handle this request?  │
 └─────────────────────────────────────────┘
      │                    │
@@ -31,91 +35,43 @@ User Request
 
 | Challenge | Problem |
 |-----------|---------|
-| **TTL Caching** | DNS records are cached by clients/resolvers. Failover isn't instant (depends on TTL) |
-| **Health Checks** | How to detect if a DC is healthy? Who decides? |
+| **TTL Caching** | DNS records are cached. Failover isn't instant |
+| **Health Checks** | How to detect if a DC is healthy? |
 | **Propagation Delay** | DNS changes take time to propagate globally |
-| **Client Behavior** | Some clients ignore TTL, cache longer than expected |
 
 ---
 
-## AWS Route 53 Routing Policies
+## Routing Policies
 
-### Simple Routing
+### 1. Simple Routing
 ```
 example.com → 1.2.3.4
 ```
-- One record, one destination
-- No health checks
 
-### Weighted Routing
+### 2. Weighted Routing
 ```
 example.com → DC1 (70%)
             → DC2 (30%)
 ```
-- Distribute traffic by percentage
-- Good for gradual rollouts, A/B testing
 
-### Latency-Based Routing
+### 3. Failover Routing (Active-Passive)
 ```
-User in Asia    → DC-Singapore
-User in Europe  → DC-Frankfurt
-User in US      → DC-Virginia
+example.com → Primary (DC1) ← Health Check
+                  │
+             if unhealthy
+                  ▼
+             Secondary (DC2)
 ```
-- Route to lowest latency region
-- Requires resources in multiple regions
 
-### Geolocation Routing
+### 4. Round-Robin (Active-Active)
 ```
-User from Vietnam  → DC-Singapore
-User from Germany  → DC-Frankfurt
-Default            → DC-Virginia
+example.com → DC1 ✓
+            → DC2 ✓
 ```
-- Route based on user's geographic location
-- Good for compliance, localized content
-
-### Failover Routing (Active-Passive)
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Route 53                             │
-│                                                         │
-│   example.com ──► Primary (DC1) ◄── Health Check       │
-│                        │                                │
-│                   if unhealthy                          │
-│                        ▼                                │
-│                   Secondary (DC2)                       │
-└─────────────────────────────────────────────────────────┘
-```
-- Primary handles all traffic when healthy
-- Automatic failover to secondary when primary fails
-- Requires health checks
-
-### Multi-Value Answer Routing
-```
-example.com → 1.2.3.4 (DC1) ✓ healthy
-            → 5.6.7.8 (DC2) ✓ healthy
-            → 9.10.11.12 (DC3) ✗ unhealthy (excluded)
-```
-- Returns multiple healthy IPs
-- Client chooses one (usually first)
-- Simple load balancing with health checks
 
 ---
 
-## Failover Patterns
-
-### Active-Passive Failover
-
-```
-Normal:
-  Route 53 ──► DC1 (Primary) ✓
-               DC2 (Secondary) standby
-
-DC1 Fails:
-  Route 53 ──► DC1 (Primary) ✗ health check fails
-           ──► DC2 (Secondary) ✓ now active
-```
-
-**TTL Consideration**: Lower TTL = faster failover, but more DNS queries
+## TTL vs Failover Speed
 
 | TTL | Failover Time | DNS Query Load |
 |-----|---------------|----------------|
@@ -123,80 +79,73 @@ DC1 Fails:
 | 300s | ~5-10 minutes | Medium |
 | 3600s | ~1+ hour | Low |
 
-### Active-Active with Health Checks
-
-```
-Route 53 (Weighted + Health Checks)
-     │
-     ├──► DC1 (50%) ✓
-     │
-     └──► DC2 (50%) ✓
-
-If DC1 fails:
-     └──► DC2 (100%) ✓
-```
-
 ---
 
-## Route 53 Application Recovery Controller (ARC)
-
-For mission-critical applications, Route 53 ARC provides:
+## Lab Architecture
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                Route 53 ARC                             │
-│                                                         │
-│   ┌─────────────┐    ┌─────────────┐                    │
-│   │  Routing    │    │  Readiness  │                    │
-│   │  Controls   │    │   Checks    │                    │
-│   │ (on/off)    │    │             │                    │
-│   └─────────────┘    └─────────────┘                    │
-│          │                  │                           │
-│          ▼                  ▼                           │
-│   Manual/Auto          Are resources                    │
-│   failover             ready in DR?                     │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────┐         ┌─────────────────┐
+│      DC1        │◄───────►│      DC2        │
+│   PowerDNS      │  sync   │   PowerDNS      │
+│   + dnsdist     │  (MinIO)│   + dnsdist     │
+└─────────────────┘         └─────────────────┘
 ```
 
-- **Routing Controls**: On/off switches for traffic routing (data plane operation, not control plane)
-- **Readiness Checks**: Verify DR region has required resources
-- **5 Regional Endpoints**: High availability for the failover mechanism itself
+**Components:**
+- **dnsdist** - DNS load balancer (port 53)
+- **PowerDNS Auth** - Authoritative DNS server
+- **PowerDNS Recursor** - Forwards unknown zones to 8.8.8.8
+- **Lightning Stream** - Syncs zones via MinIO S3
 
----
+### Quick Start
 
-## Best Practices
+```bash
+cd dns/lab
 
-1. **Set appropriate TTL**
-   - Lower for critical services (60-300s)
-   - Higher for stable services (3600s+)
+# Deploy
+kubectl apply -f powerdns/dc1-port53.yaml
+kubectl apply -f powerdns/dc2-port53.yaml
+kubectl apply -f minio/dc1.yaml
+kubectl apply -f minio/dc2.yaml
 
-2. **Health check strategy**
-   - Check application health, not just TCP port
-   - Use multiple health check locations
-   - Consider dependencies (DB, cache)
+# Create zone
+curl -X POST http://<DC1_IP>:8081/api/v1/servers/localhost/zones \
+  -H "X-API-Key: changeme" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"example.com.","kind":"Native","nameservers":["ns1.example.com."]}'
 
-3. **Test failover regularly**
-   - DR drills with real traffic
-   - Document failover procedures
+# Test
+nslookup example.com <DC1_IP>
+```
 
-4. **Monitor DNS**
-   - Track resolution times
-   - Alert on health check failures
+### Test Replication
 
----
+```bash
+# Add record on DC1
+curl -X PATCH http://<DC1_IP>:8081/api/v1/servers/localhost/zones/example.com. \
+  -H "X-API-Key: changeme" \
+  -H "Content-Type: application/json" \
+  -d '{"rrsets":[{"name":"www.example.com.","type":"A","ttl":60,"changetype":"REPLACE",
+       "records":[{"content":"1.2.3.4","disabled":false}]}]}'
 
-## Comparison with Other Solutions
+# Wait 10s, then verify on DC2
+nslookup www.example.com <DC2_IP>
+```
 
-| Solution | Pros | Cons |
-|----------|------|------|
-| **Route 53** | Integrated with AWS, global anycast, ARC | AWS-specific |
-| **Self-hosted (BIND/PowerDNS)** | Full control | Operational burden |
+### Failover Test
+
+```bash
+# Kill DC1
+kubectl scale deployment powerdns -n dns-dc1 --replicas=0
+
+# DC2 still works (zone was replicated)
+nslookup www.example.com <DC2_IP>
+```
 
 ---
 
 ## References
 
 - [Route 53 Routing Policies](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy.html)
-- [Route 53 Failover Routing](https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/routing-policy-failover.html)
-- [Route 53 Application Recovery Controller](https://aws.amazon.com/blogs/networking-and-content-delivery/building-highly-resilient-applications-using-amazon-route-53-application-recovery-controller-part-2-multi-region-stack/)
-- [Multi-Region Failover Strategies](https://aws.amazon.com/blogs/networking-and-content-delivery/manual-failover-and-failback-strategy-with-amazon-route53/)
+- [PowerDNS Documentation](https://doc.powerdns.com/)
+- [Lightning Stream](https://doc.powerdns.com/lightningstream/)
