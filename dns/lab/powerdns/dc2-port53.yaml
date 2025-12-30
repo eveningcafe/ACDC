@@ -32,7 +32,8 @@ data:
     local-address=0.0.0.0
     local-port=5401
     allow-from=0.0.0.0/0
-    forward-zones=example.com=127.0.0.1:5400,lab.local=127.0.0.1:5400
+    forward-zones=example.com=127.0.0.1:5400,lab.local=127.0.0.1:5400,dantri.com=127.0.0.1:5400
+    forward-zones-recurse=.=8.8.8.8
     api-key=changeme
     webserver=yes
     webserver-address=0.0.0.0
@@ -42,11 +43,11 @@ data:
     dnssec=off
 
   dnsdist.conf: |
-    setLocal("0.0.0.0:5354")
+    setLocal("0.0.0.0:53")
     newServer({address="127.0.0.1:5400", name="auth", pool="auth"})
     newServer({address="127.0.0.1:5401", name="recursor", pool="recursor"})
     setACL({"0.0.0.0/0", "::/0"})
-    addAction({"example.com.", "lab.local."}, PoolAction("auth"))
+    addAction({"example.com.", "lab.local.", "dantri.com."}, PoolAction("auth"))
     addAction(AllRule(), PoolAction("recursor"))
     webserver("0.0.0.0:8183")
     setWebserverConfig({password="changeme", apiKey="changeme", acl="0.0.0.0/0"})
@@ -78,7 +79,7 @@ data:
         secret_key: ${AWS_SECRET_ACCESS_KEY}
         region: us-east-1
         bucket: lightning-stream
-        endpoint_url: http://127.0.0.1:9200
+        endpoint_url: http://minio.dns-dc2.svc.cluster.local:9200
         create_bucket: true
     http:
       address: 0.0.0.0:8184
@@ -123,8 +124,14 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
-      nodeSelector:
-        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-d9b4c
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: powerdns
+              topologyKey: kubernetes.io/hostname
+              namespaceSelector: {}
       initContainers:
         - name: init-permissions
           image: busybox
@@ -136,11 +143,11 @@ spec:
         - name: dnsdist
           image: powerdns/dnsdist-19:latest
           ports:
-            - containerPort: 5354
-              hostPort: 5354
+            - containerPort: 53
+              hostPort: 53
               protocol: UDP
-            - containerPort: 5354
-              hostPort: 5354
+            - containerPort: 53
+              hostPort: 53
               protocol: TCP
             - containerPort: 8183
               hostPort: 8183
@@ -149,6 +156,8 @@ spec:
               mountPath: /etc/dnsdist/dnsdist.conf
               subPath: dnsdist.conf
           securityContext:
+            runAsUser: 0
+            runAsGroup: 0
             capabilities:
               add: [NET_BIND_SERVICE]
 

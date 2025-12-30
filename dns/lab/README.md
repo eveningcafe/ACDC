@@ -20,7 +20,7 @@ Kubernetes lab for PowerDNS cross-AZ DNS with weighted routing simulation.
 │   │             │ LMDB         │            │             │ LMDB         │  │
 │   │             ▼              │            │             ▼              │  │
 │   │ ┌────────────────────────┐ │            │ ┌────────────────────────┐ │  │
-│   │ │ minio          :9000   │◄┼────────────┼►│ minio          :9100   │ │  │
+│   │ │ minio          :9000   │◄┼────────────┼►│ minio          :9200   │ │  │
 │   │ └────────────────────────┘ │ Site Repl  │ └────────────────────────┘ │  │
 │   │                            │            │                            │  │
 │   │ ┌────────────────────────┐ │            │ ┌────────────────────────┐ │  │
@@ -40,7 +40,7 @@ Kubernetes lab for PowerDNS cross-AZ DNS with weighted routing simulation.
 | PowerDNS Recursor | 5301, 8082 | 5401, 8182 |
 | dnsdist Web | 8083 | 8183 |
 | Lightning Stream | 8084 | 8184 |
-| MinIO | 9000, 9001 | 9100, 9101 |
+| MinIO | 9000, 9001 | 9200, 9201 |
 | Backend | 8080 | 8180 |
 
 ## File Structure
@@ -59,6 +59,12 @@ dns/lab/
 └── README.md
 ```
 
+## Prerequisites
+
+- Kubernetes cluster with 2+ nodes
+- Node selector is configured in YAMLs (update `kubernetes.io/hostname` values if needed)
+- MinIO site replication must be set up for zone sync between DCs
+
 ## Quick Start
 
 ```bash
@@ -76,30 +82,30 @@ kubectl apply -f dns/lab/backend/dc2.yaml
 kubectl wait --for=condition=ready pod -l app=powerdns -n dns-dc1 --timeout=120s
 kubectl wait --for=condition=ready pod -l app=powerdns -n dns-dc2 --timeout=120s
 
-# Setup MinIO site replication
+# Setup MinIO site replication (optional, if Lightning Stream is enabled)
 mc alias set dc1 http://localhost:9000 minioadmin minioadmin123
-mc alias set dc2 http://localhost:9100 minioadmin minioadmin123
+mc alias set dc2 http://localhost:9200 minioadmin minioadmin123
 mc admin replicate add dc1 dc2
 ```
 
-## DNS Routing Patterns (Route 53 Style)
+## DNS Routing Patterns
 
-### 1. Setup Zone with Weighted Records
+### Create Zone
 
 ```bash
 # Create zone on DC1 (syncs to DC2 via Lightning Stream)
-curl -X POST http://localhost:8081/api/v1/servers/localhost/zones \
+curl -X POST http://<DC1_IP>:8081/api/v1/servers/localhost/zones \
   -H "X-API-Key: changeme" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "example.com.",
-    "kind": "Native",
-    "nameservers": ["ns1.example.com."]
-  }'
+  -d '{"name": "example.com.", "kind": "Native", "nameservers": ["ns1.example.com."]}'
+```
 
-# Add weighted A records (70% DC1, 30% DC2)
-# PowerDNS uses multiple A records - client randomly picks one
-curl -X PATCH http://localhost:8081/api/v1/servers/localhost/zones/example.com. \
+### Active-Active (Round-Robin)
+
+Both DCs serve traffic, client picks one:
+
+```bash
+curl -X PATCH http://<DC1_IP>:8081/api/v1/servers/localhost/zones/example.com. \
   -H "X-API-Key: changeme" \
   -H "Content-Type: application/json" \
   -d '{
@@ -110,171 +116,133 @@ curl -X PATCH http://localhost:8081/api/v1/servers/localhost/zones/example.com. 
       "changetype": "REPLACE",
       "records": [
         {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.2.10", "disabled": false},
-        {"content": "10.0.2.10", "disabled": false},
         {"content": "10.0.2.10", "disabled": false}
       ]
     }]
   }'
 ```
 
-### 2. Weighted Routing Simulation
-
-```
-app.example.com → 10.0.1.10 (DC1) - 70%
-                → 10.0.2.10 (DC2) - 30%
-```
-
-Test with multiple queries:
-```bash
-# Query multiple times to see distribution
-for i in {1..10}; do
-  dig @localhost -p 5353 app.example.com +short
-done
-```
-
-### 3. Failover Routing (Active-Passive)
-
-For failover, configure client-side or use health checks:
+### Active-Passive (Manual Failover)
 
 ```bash
-# Primary record
-curl -X PATCH http://localhost:8081/api/v1/servers/localhost/zones/example.com. \
+# Normal: point to DC1
+curl -X PATCH http://<DC1_IP>:8081/api/v1/servers/localhost/zones/example.com. \
   -H "X-API-Key: changeme" \
   -H "Content-Type: application/json" \
-  -d '{
-    "rrsets": [{
-      "name": "api.example.com.",
-      "type": "A",
-      "ttl": 60,
-      "changetype": "REPLACE",
-      "records": [
-        {"content": "10.0.1.10", "disabled": false}
-      ]
-    }]
-  }'
+  -d '{"rrsets": [{"name": "api.example.com.", "type": "A", "ttl": 60, "changetype": "REPLACE",
+       "records": [{"content": "10.0.1.10", "disabled": false}]}]}'
 
-# When DC1 fails, update to DC2 (manual failover)
-curl -X PATCH http://localhost:8081/api/v1/servers/localhost/zones/example.com. \
+# Failover: switch to DC2
+curl -X PATCH http://<DC1_IP>:8081/api/v1/servers/localhost/zones/example.com. \
   -H "X-API-Key: changeme" \
   -H "Content-Type: application/json" \
-  -d '{
-    "rrsets": [{
-      "name": "api.example.com.",
-      "type": "A",
-      "ttl": 60,
-      "changetype": "REPLACE",
-      "records": [
-        {"content": "10.0.2.10", "disabled": false}
-      ]
-    }]
-  }'
+  -d '{"rrsets": [{"name": "api.example.com.", "type": "A", "ttl": 60, "changetype": "REPLACE",
+       "records": [{"content": "10.0.2.10", "disabled": false}]}]}'
 ```
 
-### 4. Multi-Value Answer (Active-Active)
+## Test Services
+
+From inside a client pod (`kubectl run client --image=nicolaka/netshoot -it --rm --restart=Never -- bash`):
 
 ```bash
-# Both DCs active - client picks one
-curl -X PATCH http://localhost:8081/api/v1/servers/localhost/zones/example.com. \
-  -H "X-API-Key: changeme" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "rrsets": [{
-      "name": "www.example.com.",
-      "type": "A",
-      "ttl": 60,
-      "changetype": "REPLACE",
-      "records": [
-        {"content": "10.0.1.10", "disabled": false},
-        {"content": "10.0.2.10", "disabled": false}
-      ]
-    }]
-  }'
+# Test backends
+curl http://<DC1_IP>:8080   # {"dc": "DC1", ...}
+curl http://<DC2_IP>:8180   # {"dc": "DC2", ...}
+
+# Test DNS round-robin
+dig @<DC1_IP> -p 5353 app.example.com +short
+# Returns: 10.0.1.10 and 10.0.2.10
 ```
 
-## Test Backend Services
+## Client Testing
+
+Client runs inside the cluster as a pod:
+
+```
+┌──────────────────────────────────────────────────────────────────────────┐
+│                           Kubernetes Cluster                             │
+│                                                                          │
+│   Node 1 (DC1_IP)                      Node 2 (DC2_IP)                   │
+│   ┌─────────────────┐                  ┌─────────────────┐               │
+│   │ DC1             │                  │ DC2             │               │
+│   │ DNS: :5353      │                  │ DNS: :5354      │               │
+│   │ Backend: :8080  │                  │ Backend: :8180  │               │
+│   └─────────────────┘                  └─────────────────┘               │
+│                                                                          │
+│   ┌─────────────────────────────────────────────────────────────────┐    │
+│   │  CLIENT POD (netshoot)                                          │    │
+│   │  - dig @DC1_IP -p 5353 app.example.com                          │    │
+│   │  - curl http://DC1_IP:8080                                      │    │
+│   └─────────────────────────────────────────────────────────────────┘    │
+└──────────────────────────────────────────────────────────────────────────┘
+```
 
 ```bash
-# Test DC1 backend
-curl http://localhost:8080
-# {"dc": "DC1", "ip": "10.0.1.10", "message": "Hello from DC1"}
+# Interactive client pod
+kubectl run client --image=nicolaka/netshoot -it --rm --restart=Never -- bash
 
-# Test DC2 backend
-curl http://localhost:8180
-# {"dc": "DC2", "ip": "10.0.2.10", "message": "Hello from DC2"}
+# Inside the pod:
+dig @<DC1_IP> -p 5353 app.example.com
+curl http://<DC1_IP>:8080   # DC1 backend
+curl http://<DC2_IP>:8180   # DC2 backend
 ```
 
-## Simulate DNS-based Load Balancing
+## Failover Testing
+
+### Zone Sync Flow
+
+```
+DC1: Record Change → LMDB → Lightning Stream → MinIO DC1
+                                                    ↓ (Site Replication)
+DC2: LMDB ← Lightning Stream ← MinIO DC2 ←─────────┘
+```
+
+### Verify Zone Replication
 
 ```bash
-# Resolve and hit backend in loop
-for i in {1..20}; do
-  IP=$(dig @localhost -p 5353 app.example.com +short | head -1)
-  if [ "$IP" = "10.0.1.10" ]; then
-    curl -s http://localhost:8080 | jq -r '.dc'
-  else
-    curl -s http://localhost:8180 | jq -r '.dc'
-  fi
-done | sort | uniq -c
-# Expected: ~14 DC1, ~6 DC2 (70/30 weighted)
+# Add record on DC1
+curl -X PATCH http://<DC1_IP>:8081/api/v1/servers/localhost/zones/example.com. \
+  -H "X-API-Key: changeme" -H "Content-Type: application/json" \
+  -d '{"rrsets": [{"name": "www.example.com.", "type": "A", "ttl": 60, "changetype": "REPLACE",
+       "records": [{"content": "1.2.3.4", "disabled": false}]}]}'
+
+# Wait for sync, then query DC2
+sleep 10
+dig @<DC2_IP> -p 5400 www.example.com +short
+# Expected: 1.2.3.4
 ```
 
-## Client Configuration
+### Simulate DC1 Failure
 
-### Option 1: Use Both DNS Servers (Failover)
 ```bash
-# /etc/resolv.conf
-nameserver 127.0.0.1  # DC1 via port forward
-options port:5353
+# Scale down DC1
+kubectl scale deployment powerdns -n dns-dc1 --replicas=0
+
+# DC2 continues serving (zone was replicated)
+dig @<DC2_IP> -p 5400 www.example.com +short
+
+# Restore DC1
+kubectl scale deployment powerdns -n dns-dc1 --replicas=1
 ```
 
-### Option 2: Local dnsdist (Active-Active)
-```lua
--- Client-side dnsdist.conf
+### Client-side Auto-Failover (dnsdist)
+
+```bash
+kubectl run dns-client --image=powerdns/dnsdist-19:latest --restart=Never -- sh -c '
+cat > /tmp/dnsdist.conf << EOF
 setLocal("127.0.0.1:53")
-newServer({address="DC1_IP:5353", name="dc1", weight=70})
-newServer({address="DC2_IP:5354", name="dc2", weight=30})
-setServerPolicy(wrandom)  -- Weighted random
-```
+newServer({address="<DC1_IP>:5353", name="dc1", checkInterval=1, maxCheckFailures=2})
+newServer({address="<DC2_IP>:5354", name="dc2", checkInterval=1, maxCheckFailures=2, order=2})
+setServerPolicy(firstAvailable)
+EOF
+dnsdist -C /tmp/dnsdist.conf --supervised'
 
-## Data Replication Flow
-
-```
-DC1: Record Change
-       │
-       ▼
-PowerDNS Auth (LMDB)
-       │
-       ▼
-Lightning Stream ──► MinIO DC1
-                        │
-                        ▼ (Site Replication)
-                     MinIO DC2
-                        │
-                        ▼
-                  Lightning Stream
-                        │
-                        ▼
-               PowerDNS Auth (LMDB)
-                     DC2: Record Synced
+# Failover happens in 1-3 seconds when DC1 goes down
+kubectl exec -it dns-client -- dig @127.0.0.1 www.example.com +short
 ```
 
 ## Cleanup
 
 ```bash
-# Delete DC1
-kubectl delete -f dns/lab/backend/dc1.yaml
-kubectl delete -f dns/lab/minio/dc1.yaml
-kubectl delete -f dns/lab/powerdns/dc1.yaml
-
-# Delete DC2
-kubectl delete -f dns/lab/backend/dc2.yaml
-kubectl delete -f dns/lab/minio/dc2.yaml
-kubectl delete -f dns/lab/powerdns/dc2.yaml
+kubectl delete ns dns-dc1 dns-dc2
 ```

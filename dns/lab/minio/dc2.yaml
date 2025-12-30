@@ -1,5 +1,21 @@
 ---
 apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: dns-dc2
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: s3
+      port: 9200
+      targetPort: 9200
+    - name: console
+      port: 9201
+      targetPort: 9201
+---
+apiVersion: v1
 kind: Secret
 metadata:
   name: minio-credentials
@@ -37,15 +53,17 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-d9b4c
       containers:
         - name: minio
           image: quay.io/minio/minio:latest
-          args: [server, /data, --address, ":9100", --console-address, ":9101"]
+          args: [server, /data, --address, ":9200", --console-address, ":9201"]
           ports:
-            - containerPort: 9100
-              hostPort: 9100
-            - containerPort: 9101
-              hostPort: 9101
+            - containerPort: 9200
+              hostPort: 9200
+            - containerPort: 9201
+              hostPort: 9201
           env:
             - name: MINIO_ROOT_USER
               valueFrom:
@@ -76,10 +94,12 @@ spec:
     spec:
       hostNetwork: true
       restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-d9b4c
       initContainers:
         - name: wait
           image: busybox:1.36
-          command: [sh, -c, "until wget -q --spider http://127.0.0.1:9100/minio/health/ready; do sleep 5; done"]
+          command: [sh, -c, "until wget -q --spider http://127.0.0.1:9200/minio/health/ready; do sleep 5; done"]
       containers:
         - name: setup
           image: quay.io/minio/mc:latest
@@ -98,7 +118,7 @@ spec:
             - /bin/sh
             - -c
             - |
-              mc alias set local http://127.0.0.1:9100 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+              mc alias set local http://127.0.0.1:9200 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
               mc mb local/lightning-stream --ignore-existing
               mc version enable local/lightning-stream
               echo "MinIO DC2 setup complete"

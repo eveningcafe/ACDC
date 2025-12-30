@@ -1,8 +1,13 @@
+
 # MinIO Multi-Site Replication
 
 **S3-compatible object storage with active-active replication**
 
 > **Managed**: AWS S3 → **Self-hosted**: MinIO (for learning, open-source)
+
+## Lab
+
+**[→ Hands-on Lab: Active-Active Replication on Kubernetes](./lab/)**
 
 ---
 
@@ -14,16 +19,8 @@ MinIO supports multi-site active-active replication, allowing objects to be sync
 ┌─────────────────┐         ┌─────────────────┐
 │   Site 1        │◄───────►│   Site 2        │
 │   MinIO         │  async  │   MinIO         │
-│                 │  sync   │                 │
-└────────┬────────┘         └────────┬────────┘
-         │                           │
-         └─────────┬─────────────────┘
-                   │
-                   ▼
-          ┌─────────────────┐
-          │   Site 3        │
-          │   MinIO         │
-          └─────────────────┘
+│   (R/W)         │  sync   │   (R/W)         │
+└─────────────────┘         └─────────────────┘
 ```
 
 ---
@@ -48,21 +45,28 @@ MinIO supports multi-site active-active replication, allowing objects to be sync
 └─────────┘           └─────────┘
 ```
 
-### 3. Multi-Site Mesh (N-Way)
+### 3. N-Way Replication (3+ Sites)
 
 ```
-      Site 1
-        ▲
-       /│\
-      / │ \
-     ▼  │  ▼
-Site 2◄─┼─►Site 3
-        │
-        ▼
-      Site 4
+┌─────────┐     ┌─────────┐     ┌─────────┐
+│ Site 1  │◄───►│ Site 2  │◄───►│ Site 3  │
+│ (R/W)   │     │ (R/W)   │     │ (R/W)   │
+└─────────┘     └─────────┘     └─────────┘
+     ▲                               ▲
+     └───────────────────────────────┘
 ```
 
-All sites can read/write, changes propagate to all others.
+MinIO supports **arbitrary number of sites**. All sites sync with each other.
+
+```bash
+mc admin replicate add site1 site2 site3
+```
+
+| Requirement | Details |
+|-------------|---------|
+| IDP | All sites must use same identity provider |
+| Initial data | Only one site can have existing data |
+| Latency | Dictated by slowest link |
 
 ---
 
@@ -105,53 +109,13 @@ All sites can read/write, changes propagate to all others.
 
 ## Setup Guide
 
-### 1. Enable Versioning on All Sites
+Site Replication syncs everything (buckets, IAM, policies) with one command:
 
 ```bash
-# Site 1
-mc version enable site1/mybucket
-
-# Site 2
-mc version enable site2/mybucket
-
-# Site 3
-mc version enable site3/mybucket
+mc admin replicate add site1 site2
 ```
 
-### 2. Add Remote Targets
-
-```bash
-# On Site 1: add Site 2 as remote target
-mc admin bucket remote add site1/mybucket \
-   https://accesskey:secretkey@site2.example.com/mybucket \
-   --service replication
-
-# Returns ARN like: arn:minio:replication::xxxx:mybucket
-```
-
-### 3. Configure Replication Rules
-
-```bash
-# Enable replication from Site 1 to Site 2
-mc replicate add site1/mybucket \
-   --remote-bucket "arn:minio:replication::xxxx:mybucket" \
-   --replicate "delete,delete-marker,existing-objects"
-```
-
-### 4. Repeat for All Direction Pairs
-
-For active-active between Site 1 and Site 2:
-```bash
-# Site 1 → Site 2 (already done above)
-# Site 2 → Site 1
-mc admin bucket remote add site2/mybucket \
-   https://accesskey:secretkey@site1.example.com/mybucket \
-   --service replication
-
-mc replicate add site2/mybucket \
-   --remote-bucket "arn:minio:replication::yyyy:mybucket" \
-   --replicate "delete,delete-marker,existing-objects"
-```
+**→ See [lab/](./lab/) for Kubernetes deployment**
 
 ---
 
@@ -189,7 +153,7 @@ mc stat site1/mybucket/myobject
 - DR site receives replicated data
 - Manual failover when needed
 
-### Pattern 2: Active-Active (Two Sites)
+### Pattern 2: Active-Active (Two Sites) ← [Lab](./lab/)
 
 ```
 ┌─────────────────┐         ┌─────────────────┐
@@ -205,26 +169,6 @@ mc stat site1/mybucket/myobject
 - Both sites accept writes
 - Users connect to nearest site
 - Eventual consistency between sites
-
-### Pattern 3: Global Mesh
-
-```
-        ┌─────────┐
-        │ US-East │
-        └────┬────┘
-             │
-    ┌────────┼────────┐
-    │        │        │
-    ▼        ▼        ▼
-┌──────┐ ┌──────┐ ┌──────┐
-│EU    │ │US-   │ │Asia  │
-│      │ │West  │ │      │
-└──────┘ └──────┘ └──────┘
-```
-
-- All sites sync with each other
-- Data available everywhere
-- Highest complexity
 
 ---
 

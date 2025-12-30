@@ -1,5 +1,21 @@
 ---
 apiVersion: v1
+kind: Service
+metadata:
+  name: minio
+  namespace: dns-dc1
+spec:
+  selector:
+    app: minio
+  ports:
+    - name: s3
+      port: 9000
+      targetPort: 9000
+    - name: console
+      port: 9001
+      targetPort: 9001
+---
+apiVersion: v1
 kind: Secret
 metadata:
   name: minio-credentials
@@ -37,6 +53,8 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-1536b
       containers:
         - name: minio
           image: quay.io/minio/minio:latest
@@ -76,6 +94,8 @@ spec:
     spec:
       hostNetwork: true
       restartPolicy: OnFailure
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-1536b
       initContainers:
         - name: wait
           image: busybox:1.36

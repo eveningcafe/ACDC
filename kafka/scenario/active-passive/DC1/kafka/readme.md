@@ -1,8 +1,4 @@
 # Usage
-https://dev-tool.vngcloud.tech/grafana/d/000000023/elasticsearch2?orgId=1&refresh=1m&from=now-30m&to=now&viewPanel=49
-https://dev-tool.vngcloud.tech/grafana/d/000000023/elasticsearch2?orgId=1&refresh=1m&from=now-30m&to=now&viewPanel=15
-https://dev-tool.vngcloud.tech/grafana/d/000000023/elasticsearch2?orgId=1&refresh=1m&from=now-30m&to=now&viewPanel=12
-https://dev-tool.vngcloud.tech/grafana/d/000000127/system-dashboard?orgId=1&refresh=1m
 Add CRD
 ```shell
 helm repo add strimzi https://strimzi.io/charts/

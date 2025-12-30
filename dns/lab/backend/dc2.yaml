@@ -37,6 +37,8 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-d9b4c
       containers:
         - name: backend
           image: nginx:alpine

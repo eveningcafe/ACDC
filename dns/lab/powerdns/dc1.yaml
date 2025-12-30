@@ -42,7 +42,7 @@ data:
     dnssec=off
 
   dnsdist.conf: |
-    setLocal("0.0.0.0:53")
+    setLocal("0.0.0.0:5353")
     newServer({address="127.0.0.1:5300", name="auth", pool="auth"})
     newServer({address="127.0.0.1:5301", name="recursor", pool="recursor"})
     setACL({"0.0.0.0/0", "::/0"})
@@ -53,22 +53,37 @@ data:
 
   lightning-stream.yaml: |
     instance: dc1
+    lmdb_poll_interval: 1s
+    storage_poll_interval: 5s
     lmdbs:
-      pdns:
+      main:
         path: /var/lib/powerdns/pdns.lmdb
+        options:
+          no_subdir: true
+        schema_tracks_changes: true
+      shard-0:
+        path: /var/lib/powerdns/pdns.lmdb-0
+        options:
+          no_subdir: true
+        schema_tracks_changes: true
+      shard-1:
+        path: /var/lib/powerdns/pdns.lmdb-1
+        options:
+          no_subdir: true
         schema_tracks_changes: true
     storage:
       type: s3
       options:
-        bucket: lightning-stream
-        endpoint: http://127.0.0.1:9000
+        access_key: ${AWS_ACCESS_KEY_ID}
+        secret_key: ${AWS_SECRET_ACCESS_KEY}
         region: us-east-1
-        force_path_style: true
-    sync:
-      snapshot_interval: 10s
-      poll_interval: 5s
+        bucket: lightning-stream
+        endpoint_url: http://127.0.0.1:9000
+        create_bucket: true
     http:
-      listen: 0.0.0.0:8084
+      address: 0.0.0.0:8084
+    log:
+      level: info
 ---
 apiVersion: v1
 kind: Secret
@@ -108,14 +123,23 @@ spec:
     spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
+      nodeSelector:
+        kubernetes.io/hostname: vks-hoanq3-maas-dev-nodegroup-d43eb-1536b
+      initContainers:
+        - name: init-permissions
+          image: busybox
+          command: ['sh', '-c', 'chown -R 953:953 /var/lib/powerdns && chmod 755 /var/lib/powerdns']
+          volumeMounts:
+            - name: lmdb-data
+              mountPath: /var/lib/powerdns
       containers:
         - name: dnsdist
           image: powerdns/dnsdist-19:latest
           ports:
-            - containerPort: 53
+            - containerPort: 5353
               hostPort: 5353
               protocol: UDP
-            - containerPort: 53
+            - containerPort: 5353
               hostPort: 5353
               protocol: TCP
             - containerPort: 8083
@@ -164,7 +188,7 @@ spec:
 
         - name: lightning-stream
           image: powerdns/lightningstream:latest
-          args: [sync, --config, /etc/lightningstream/config.yaml]
+          args: ["sync", "--config", "/etc/lightningstream/config.yaml"]
           ports:
             - containerPort: 8084
               hostPort: 8084
